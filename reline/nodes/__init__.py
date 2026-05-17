@@ -8,6 +8,8 @@ from .level import LevelNode, LevelOptions
 from .halftone import HalftoneNode, HalftoneOptions
 from .sharp import SharpNode, SharpOptions
 from .cvt_color import CvtColorNode, CvtColorOptions
+from .snapshot_writer import SnapshotWriterNode, SnapshotWriterOptions
+from .api_output import ApiOutputNode, ApiOutputOptions
 from .registry import Registry
 
 INTERNAL_REGISTRY = (
@@ -22,6 +24,8 @@ INTERNAL_REGISTRY = (
     .set('halftone', HalftoneNode, HalftoneOptions)
     .set('sharp', SharpNode, SharpOptions)
     .set('cvt_color', CvtColorNode, CvtColorOptions)
+    .set('snapshot_writer', SnapshotWriterNode, SnapshotWriterOptions)
+    .set('api_output', ApiOutputNode, ApiOutputOptions)
 )
 
 __all__ = [
@@ -46,5 +50,9 @@ __all__ = [
     'SharpOptions',
     'CvtColorNode',
     'CvtColorOptions',
+    'SnapshotWriterNode',
+    'SnapshotWriterOptions',
+    'ApiOutputNode',
+    'ApiOutputOptions',
     'INTERNAL_REGISTRY',
 ]
