@@ -55,6 +55,8 @@ class UpscaleNode(Node[UpscaleOptions]):
         self.model = None
         self.model_path = None
         self.model_cache = {}
+        self.last_detection = None
+        self.last_model_path = None
         self.model_selector: Optional[ModelSelector] = None
         self.tiler = self._create_tiler()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -198,6 +200,8 @@ class UpscaleNode(Node[UpscaleOptions]):
         except Exception as e:
             logging.error('Failed to load upscale model `%s` for `%s`: %s; skipping image', model_path, label, e)
             return None
+        self.last_detection = detection
+        self.last_model_path = model_path
         logging.info('Upscale `%s`: detected=%s, reason=%s%s, model=%s', label, 'color' if detection.is_color else 'gray', detection.reason, metrics, model_path)
         img = self._img_ch_to_model_ch(file.data)
         file.data = process_tiles(

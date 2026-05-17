@@ -10,11 +10,13 @@ from ..nodes.file_reader import FileReaderNode
 from ..nodes.folder_reader import FolderReaderNode
 from ..nodes.file_writer import FileWriterNode
 from ..nodes.folder_writer import FolderWriterNode
+from ..nodes.upscale import UpscaleNode
 
 
 class Pipeline:
     def __init__(self, nodes: List[Node]):
         self.nodes = nodes
+        self.last_result = {}
 
     def process(self, with_tqdm: bool = True):
         data = []
@@ -38,6 +40,7 @@ class Pipeline:
                         img = node.single_process(img)
                         local_node_index += 1
                         if isinstance(node, FolderWriterNode | FileWriterNode):
+                            self.last_result = self._collect_result(img)
                             save_index = local_node_index - 1
                             break
                         if img is None:
@@ -47,6 +50,24 @@ class Pipeline:
             else:
                 nodes_index += 1
         del data
+
+    def _collect_result(self, img):
+        result = {
+            'detected_color': None,
+            'model_used': None,
+            'skipped_nodes': [],
+        }
+        if img is not None:
+            result['detected_color'] = 'color' if img.is_color else 'gray' if img.is_color is not None else None
+            result['skipped_nodes'] = img.skipped_nodes
+        for node in self.nodes:
+            if isinstance(node, UpscaleNode):
+                detection = getattr(node, 'last_detection', None)
+                if detection is not None:
+                    result['detected_color'] = 'color' if detection.is_color else 'gray'
+                result['model_used'] = getattr(node, 'last_model_path', None)
+                break
+        return result
 
     @classmethod
     def from_json(cls, data: Dict) -> Pipeline:
