@@ -40,6 +40,8 @@ class Pipeline:
                         if isinstance(node, FolderWriterNode | FileWriterNode):
                             save_index = local_node_index - 1
                             break
+                        if img is None:
+                            break
                 nodes_index = save_index
                 nodes_index += 1
             else:
