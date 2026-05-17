@@ -62,9 +62,6 @@ class Pipeline:
             result['skipped_nodes'] = img.skipped_nodes
         for node in self.nodes:
             if isinstance(node, UpscaleNode):
-                detection = getattr(node, 'last_detection', None)
-                if detection is not None:
-                    result['detected_color'] = 'color' if detection.is_color else 'gray'
                 result['model_used'] = getattr(node, 'last_model_path', None)
                 break
         return result

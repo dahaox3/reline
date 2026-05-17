@@ -1,13 +1,13 @@
 from dataclasses import dataclass
 from typing import Callable, Optional, List, Literal
 
-import cv2
 import numpy as np
 import torch.cuda
 from resselt import load_from_file
 from resr.tiling import MaxTileSize, ExactTileSize, NoTiling, process_tiles
 from pepeline import cvt_color, CVTColor
 from reline.static import Node, NodeOptions, ImageFile
+from reline.utils import ColorDetectionResult, detect_image_color
 import logging
 
 Tiler = Literal['exact', 'max', 'no_tiling']
@@ -15,14 +15,6 @@ DType = Literal['F32', 'F16', 'BF16']
 ColorDetectMode = Literal['auto', 'force_color', 'force_gray']
 ModelCacheMode = Literal['low_memory', 'high_memory']
 ModelSelector = Callable[[ImageFile, bool], Optional[str]]
-
-
-@dataclass(frozen=True)
-class ColorDetectionResult:
-    is_color: bool
-    saturated_ratio: Optional[float] = None
-    rgb_diff_mean: Optional[float] = None
-    reason: str = 'auto'
 
 
 def empty_cuda_cache():
@@ -99,59 +91,6 @@ class UpscaleNode(Node[UpscaleOptions]):
     def _image_label(self, file: ImageFile) -> str:
         return f'{file.dir}/{file.basename}' if file.dir else file.basename
 
-    def _to_uint8_rgb(self, img: np.ndarray) -> np.ndarray:
-        if img.dtype == np.uint8:
-            result = img.copy()
-        else:
-            result = np.asarray(img)
-            if result.size and float(np.nanmax(result)) <= 1.0:
-                result = result * 255.0
-            result = np.clip(result, 0, 255).astype(np.uint8)
-
-        if result.ndim == 2:
-            return np.stack([result, result, result], axis=-1)
-        if result.ndim == 3 and result.shape[2] >= 3:
-            return result[:, :, :3]
-        return np.squeeze(result)
-
-    def _detect_color(self, img: np.ndarray) -> ColorDetectionResult:
-        mode = self.options.color_detect_mode or 'auto'
-        if mode == 'force_color':
-            return ColorDetectionResult(True, reason='force_color')
-        if mode == 'force_gray':
-            return ColorDetectionResult(False, reason='force_gray')
-
-        squeezed = np.squeeze(img)
-        if squeezed.ndim == 2:
-            return ColorDetectionResult(False, reason='single_channel')
-        if squeezed.ndim != 3 or squeezed.shape[2] == 1:
-            return ColorDetectionResult(False, reason='single_channel')
-
-        rgb = self._to_uint8_rgb(squeezed)
-        if rgb.ndim != 3 or rgb.shape[2] < 3:
-            return ColorDetectionResult(False, reason='single_channel')
-
-        height, width = rgb.shape[:2]
-        scale = 256 / max(height, width)
-        if scale < 1:
-            rgb = cv2.resize(rgb, (max(1, int(width * scale)), max(1, int(height * scale))), interpolation=cv2.INTER_AREA)
-
-        value = rgb.max(axis=2)
-        mask = (value >= 10) & (value <= 245)
-        if not np.any(mask):
-            return ColorDetectionResult(False, 0.0, 0.0, 'no_sample_pixels')
-
-        hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
-        saturation = hsv[:, :, 1]
-        rgb_diff = rgb.max(axis=2).astype(np.int16) - rgb.min(axis=2).astype(np.int16)
-
-        sampled_saturation = saturation[mask]
-        sampled_diff = rgb_diff[mask]
-        saturated_ratio = float(np.mean(sampled_saturation > 30))
-        rgb_diff_mean = float(np.mean(sampled_diff))
-        is_color = saturated_ratio > 0.05 and rgb_diff_mean > 10
-        return ColorDetectionResult(is_color, saturated_ratio, rgb_diff_mean, 'auto')
-
     def _select_model(self, file: ImageFile, detection: ColorDetectionResult) -> Optional[str]:
         if self.model_selector is not None:
             return self.model_selector(file, detection.is_color)
@@ -184,8 +123,14 @@ class UpscaleNode(Node[UpscaleOptions]):
         return img
 
     def _process_image(self, file: ImageFile) -> Optional[ImageFile]:
-        detection = self._detect_color(file.data) if self.options.auto_detect_color else ColorDetectionResult(False, reason='disabled')
-        file.is_color = detection.is_color
+        if self.options.auto_detect_color:
+            if file.is_color is None or self.options.color_detect_mode in ('force_color', 'force_gray'):
+                detection = detect_image_color(file.data, self.options.color_detect_mode)
+                file.is_color = detection.is_color
+            else:
+                detection = ColorDetectionResult(file.is_color, reason='metadata')
+        else:
+            detection = ColorDetectionResult(file.is_color or False, reason='disabled')
         model_path = self._select_model(file, detection)
         label = self._image_label(file)
         metrics = ''

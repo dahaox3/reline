@@ -37,11 +37,15 @@ class CvtColorNode(Node[CvtColorOptions]):
     def process(self, files: List[ImageFile]) -> List[ImageFile]:
         for file in files:
             file.data = self.__cvt_logic(file.data)
+            if self.cvt_type in [CVTColor.RGB2Gray_2020, CVTColor.RGB2Gray_709, CVTColor.RGB2Gray_601]:
+                file.is_color = False
 
         return files
 
     def single_process(self, file: ImageFile) -> ImageFile:
         file.data = self.__cvt_logic(file.data)
+        if self.cvt_type in [CVTColor.RGB2Gray_2020, CVTColor.RGB2Gray_709, CVTColor.RGB2Gray_601]:
+            file.is_color = False
 
         return file
 

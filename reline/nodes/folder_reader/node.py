@@ -8,6 +8,7 @@ import logging
 from pepeline import read, ImgFormat, ImgColor
 
 from reline.static import Node, NodeOptions, ImageFile
+from reline.utils import detect_image_color
 
 MODE_MAP = {'rgb': ImgColor.RGB, 'gray': ImgColor.GRAY, 'dynamic': ImgColor.DYNAMIC}
 
@@ -38,7 +39,7 @@ class ImageIterator:
                 dirpath = os.path.dirname(os.path.relpath(file_path, commonprefix))
                 basename, _ = os.path.splitext(os.path.basename(file_path))
                 data = read(file_path, self.mode, ImgFormat.F32)
-                file = ImageFile(data, basename, dirpath)
+                file = ImageFile(data, basename, dirpath, detect_image_color(data).is_color)
                 self.current += 1
                 return file
             except Exception as e:
@@ -85,7 +86,7 @@ class FolderReaderNode(Node[FolderReaderOptions]):
 
                 data = read(file_path, self.mode, ImgFormat.F32)
 
-                file = ImageFile(data, basename, dirpath)
+                file = ImageFile(data, basename, dirpath, detect_image_color(data).is_color)
                 files.append(file)
             except Exception as e:
                 logging.warning(f'image {basename} not decoded due to error: {e}')
