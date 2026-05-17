@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import logging
 from typing import List, Optional
 
 import numpy as np
@@ -14,6 +15,7 @@ class LevelOptions(NodeOptions):
     low_output: Optional[int] = 0
     high_output: Optional[int] = 255
     gamma: Optional[float] = 1.0
+    skip_on_color: Optional[bool] = False
 
 
 class LevelNode(Node[LevelOptions]):
@@ -22,6 +24,10 @@ class LevelNode(Node[LevelOptions]):
 
     def process(self, files: List[ImageFile]) -> List[ImageFile]:
         for file in files:
+            if self.options.skip_on_color and file.is_color:
+                file.skipped_nodes.append('level')
+                logging.info('Skip level for color image `%s`', file.basename)
+                continue
             file.data = color_levels(
                 file.data,
                 self.options.low_input,
@@ -34,6 +40,10 @@ class LevelNode(Node[LevelOptions]):
         return files
 
     def single_process(self, file: ImageFile) -> ImageFile:
+        if self.options.skip_on_color and file.is_color:
+            file.skipped_nodes.append('level')
+            logging.info('Skip level for color image `%s`', file.basename)
+            return file
         file.data = color_levels(
             file.data,
             self.options.low_input,

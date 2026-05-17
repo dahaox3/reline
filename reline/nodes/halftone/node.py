@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import logging
 from typing import List, Optional, Literal
 
 import numpy as np
@@ -34,6 +35,7 @@ class HalftoneOptions(NodeOptions):
     ssaa_scale: Optional[float] = None
     ssaa_filter: Optional[FilterType] = 'shamming4'
     disable_auto_dot: Optional[bool] = False
+    skip_on_color: Optional[bool] = False
 
 
 class HalftoneNode(Node[HalftoneOptions]):
@@ -52,12 +54,20 @@ class HalftoneNode(Node[HalftoneOptions]):
 
     def process(self, files: List[ImageFile]) -> List[ImageFile]:
         for file in files:
+            if self.options.skip_on_color and file.is_color:
+                file.skipped_nodes.append('halftone')
+                logging.info('Skip halftone for color image `%s`', file.basename)
+                continue
             file.data = self.halftone(
                 file.data.squeeze(), self.dot_size, self.angle, self.dot_type, self.scale, self.ssaa_filter, self.disable_auto_dot
             )
         return files
 
     def single_process(self, file: ImageFile) -> ImageFile:
+        if self.options.skip_on_color and file.is_color:
+            file.skipped_nodes.append('halftone')
+            logging.info('Skip halftone for color image `%s`', file.basename)
+            return file
         file.data = self.halftone(file.data.squeeze(), self.dot_size, self.angle, self.dot_type, self.scale, self.ssaa_filter, self.disable_auto_dot)
         return file
 

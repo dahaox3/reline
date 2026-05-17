@@ -13,6 +13,7 @@ import logging
 Tiler = Literal['exact', 'max', 'no_tiling']
 DType = Literal['F32', 'F16', 'BF16']
 ColorDetectMode = Literal['auto', 'force_color', 'force_gray']
+ModelCacheMode = Literal['low_memory', 'high_memory']
 ModelSelector = Callable[[ImageFile, bool], Optional[str]]
 
 
@@ -41,6 +42,7 @@ class UpscaleOptions(NodeOptions):
     color_model: Optional[str] = None
     gray_model: Optional[str] = None
     color_detect_mode: Optional[ColorDetectMode] = 'auto'
+    model_cache_mode: Optional[ModelCacheMode] = 'low_memory'
 
 
 class UpscaleNode(Node[UpscaleOptions]):
@@ -52,6 +54,7 @@ class UpscaleNode(Node[UpscaleOptions]):
         self.target_scale = options.target_scale
         self.model = None
         self.model_path = None
+        self.model_cache = {}
         self.model_selector: Optional[ModelSelector] = None
         self.tiler = self._create_tiler()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -74,13 +77,22 @@ class UpscaleNode(Node[UpscaleOptions]):
             raise ValueError('Upscale model path is empty')
         if self.model_path == model_path and self.model is not None:
             return
+        if self.options.model_cache_mode == 'high_memory' and model_path in self.model_cache:
+            self.model = self.model_cache[model_path]
+            self.model_path = model_path
+            return
         if self.model is not None:
-            del self.model
+            if self.options.model_cache_mode == 'high_memory':
+                self.model_cache[self.model_path] = self.model
+            else:
+                del self.model
             self.model = None
-            if self.device == 'cuda':
+            if self.device == 'cuda' and self.options.model_cache_mode != 'high_memory':
                 empty_cuda_cache()
         self.model = load_from_file(model_path)
         self.model_path = model_path
+        if self.options.model_cache_mode == 'high_memory':
+            self.model_cache[model_path] = self.model
 
     def _image_label(self, file: ImageFile) -> str:
         return f'{file.dir}/{file.basename}' if file.dir else file.basename
@@ -171,6 +183,7 @@ class UpscaleNode(Node[UpscaleOptions]):
 
     def _process_image(self, file: ImageFile) -> Optional[ImageFile]:
         detection = self._detect_color(file.data) if self.options.auto_detect_color else ColorDetectionResult(False, reason='disabled')
+        file.is_color = detection.is_color
         model_path = self._select_model(file, detection)
         label = self._image_label(file)
         metrics = ''
