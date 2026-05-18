@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import List, Literal
 
 import numpy as np
-from pepeline import save
 
 from reline.static import ImageFile, Node, NodeOptions
+from reline.utils import atomic_save
 
 FileFormat = Literal['png', 'jpeg']
 
@@ -33,7 +33,7 @@ class SnapshotWriterNode(Node[SnapshotWriterOptions]):
         full_path = Path(os.path.abspath(self.options.path)) / file.dir / f'{file.basename}.{self.options.format}'
         full_path.parent.mkdir(parents=True, exist_ok=True)
         target = self._unique_path(full_path)
-        save(file.data, str(target))
+        atomic_save(file.data, str(target))
         return file
 
     def _unique_path(self, path: Path) -> Path:

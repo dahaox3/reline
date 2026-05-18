@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os.path
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Optional, Literal
 import logging
 
@@ -52,6 +53,7 @@ class FolderReaderOptions(NodeOptions):
     path: str
     recursive: Optional[bool] = False
     mode: Optional[Mode] = 'dynamic'
+    skip_existing_in: str = ''
 
 
 class FolderReaderNode(Node[FolderReaderOptions]):
@@ -74,8 +76,30 @@ class FolderReaderNode(Node[FolderReaderOptions]):
 
         return file_paths
 
+    def _filter_existing(self, file_paths: list[str]) -> list[str]:
+        if not self.options.skip_existing_in:
+            return file_paths
+        output_dir = Path(self.options.skip_existing_in)
+        if not output_dir.exists():
+            return file_paths
+        existing_stems = {
+            path.stem
+            for path in output_dir.rglob('*')
+            if path.is_file() and not path.name.startswith('.')
+        }
+        before = len(file_paths)
+        filtered = [
+            file_path
+            for file_path in file_paths
+            if Path(file_path).stem not in existing_stems
+        ]
+        skipped = before - len(filtered)
+        if skipped:
+            logging.info(f'Skipped {skipped} files already in {output_dir}')
+        return filtered
+
     def process(self, _) -> List[ImageFile]:
-        file_paths = self._scandir(self.dir_path)
+        file_paths = self._filter_existing(self._scandir(self.dir_path))
         files = []
         basename = None
         for file_path in file_paths:
@@ -95,7 +119,7 @@ class FolderReaderNode(Node[FolderReaderOptions]):
         return files
 
     def single_process(self, _) -> ImageIterator:
-        file_paths = self._scandir(self.dir_path)
+        file_paths = self._filter_existing(self._scandir(self.dir_path))
         return ImageIterator(file_paths, self.dir_path, self.mode)
 
     def video_process(self, _):

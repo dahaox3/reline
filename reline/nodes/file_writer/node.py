@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List
 
-from pepeline import save
 from reline.static import Node, NodeOptions, ImageFile
+from reline.utils import atomic_save
 
 
 @dataclass(frozen=True)
@@ -20,10 +20,10 @@ class FileWriterNode(Node[FileWriterOptions]):
         if len(files) != 1:
             raise ValueError('Expected single image file')
 
-        return save(files[0].data, self.options.path)
+        return atomic_save(files[0].data, self.options.path)
 
     def single_process(self, file: ImageFile):
-        return save(file.data, self.options.path)
+        return atomic_save(file.data, self.options.path)
 
     def video_process(self, _):
         raise ValueError('Video scale does not support file write')
