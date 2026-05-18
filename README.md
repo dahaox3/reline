@@ -11,6 +11,9 @@ This fork extends [rewaifu/reline](https://github.com/rewaifu/reline) with featu
 - `level` and `halftone` support `skip_on_color`, allowing color pages to bypass monochrome-oriented post-processing.
 - `snapshot_writer` can save an intermediate image state without stopping the rest of the pipeline.
 - `api_output` marks which image state should be returned by API clients while later nodes may still continue processing.
+- `api_output` supports an independent response format option: `jpeg` by default, or `png`.
+- `folder_reader` supports `skip_existing_in`, allowing batch jobs to skip input files whose basename already exists in an output folder.
+- Writers use atomic file output so completed batch results can be reused safely by skip-existing workflows.
 
 ## Usage
 
