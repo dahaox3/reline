@@ -58,7 +58,7 @@ class UpscaleNode(Node[UpscaleOptions]):
             self.dtype = torch.bfloat16
         else:
             self.dtype = torch.float32
-        if not options.auto_detect_color or options.model:
+        if options.model:
             self._switch_model(options.model)
         if self.device == 'cuda':
             empty_cuda_cache()
@@ -98,13 +98,9 @@ class UpscaleNode(Node[UpscaleOptions]):
             return self.options.model
 
         preferred_model = self.options.color_model if detection.is_color else self.options.gray_model
-        fallback_model = self.options.model
         image_type = 'color' if detection.is_color else 'gray'
         if preferred_model:
             return preferred_model
-        if fallback_model:
-            logging.warning('%s image `%s` has no dedicated %s model configured; using fallback model `%s`', image_type, self._image_label(file), image_type, fallback_model)
-            return fallback_model
         return None
 
     def _img_ch_to_model_ch(self, img: np.ndarray) -> np.ndarray:
@@ -133,19 +129,21 @@ class UpscaleNode(Node[UpscaleOptions]):
             detection = ColorDetectionResult(file.is_color or False, reason='disabled')
         model_path = self._select_model(file, detection)
         label = self._image_label(file)
+        self.last_detection = detection
+        self.last_model_path = None
         metrics = ''
         if detection.saturated_ratio is not None and detection.rgb_diff_mean is not None:
             metrics = f', saturated_ratio={detection.saturated_ratio:.4f}, rgb_diff_mean={detection.rgb_diff_mean:.2f}'
         if not model_path:
-            logging.error('No valid upscale model for `%s` (%s%s); skipping image', label, 'color' if detection.is_color else 'gray', metrics)
-            return None
+            logging.info('Upscale `%s`: detected=%s, reason=%s%s, no model configured; passing image through', label, 'color' if detection.is_color else 'gray', detection.reason, metrics)
+            file.skipped_nodes.append('upscale')
+            return file
 
         try:
             self._switch_model(model_path)
         except Exception as e:
             logging.error('Failed to load upscale model `%s` for `%s`: %s; skipping image', model_path, label, e)
             return None
-        self.last_detection = detection
         self.last_model_path = model_path
         logging.info('Upscale `%s`: detected=%s, reason=%s%s, model=%s', label, 'color' if detection.is_color else 'gray', detection.reason, metrics, model_path)
         img = self._img_ch_to_model_ch(file.data)
